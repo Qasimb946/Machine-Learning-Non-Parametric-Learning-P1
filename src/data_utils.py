@@ -17,4 +17,8 @@ def load_data(file_path, has_header=False, missing_value=None):
 def min_max_normalization(X):
     X_min = np.min(X, axis=0)
     X_max = np.max(X, axis=0)
+    return X_min, X_max, (X-X_min)/(X_max - X_min)
+
+def helper_min_max_normalization(X, X_min, X_max):
     return (X-X_min)/(X_max - X_min)
+

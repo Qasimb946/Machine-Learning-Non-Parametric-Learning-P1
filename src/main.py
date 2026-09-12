@@ -18,14 +18,27 @@ def test_null_classifier():
     return errors
 
 
-def test_KNN_classifier():
+def test_knn_classifier():
+    results = []
+
     breast_cancer = du.load_data("data/breast-cancer-wisconsin.data", missing_value="?")
     X = breast_cancer[:, 1:-1].astype(float)
     y = breast_cancer[:, -1]
 
+    for p in [1, 2]:
+        for k in range(1, 10):
+            model = cls.KNNClassifier(k=k, p=p)
+            errors = evl.cross_validation(model, X, y, evl.classification_error, seed=42)
+            results.append([k, p, np.mean(errors)])
 
+    results = np.array(results)
+    best_index = np.argmin(results[:, 2])
+    best_result = results[best_index]
+    return best_result
 
 if __name__ == '__main__':
-    null_classifier_error = test_null_classifier()
-    print(null_classifier_error)
-    pass
+    # null_classifier_errors = test_null_classifier()
+    # print(null_classifier_errors)
+
+    knn_classifier_result = test_knn_classifier()
+    print(knn_classifier_result)
