@@ -117,9 +117,11 @@ def tune_regressor(
     k_candidates,
     gamma_candidates,
     epsilon_candidates=None,
-    random_state=42
+    random_state=42,
+    cyclic_cols=None
 ):
     # X is a DataFrame containing inputs only
+    # cyclic_cols: e.g. ["month", "day"] -- None means unaffected (Abalone).
     y = np.asarray(y, dtype=float)
 
     if y.ndim != 1 or len(X) != len(y):
@@ -134,7 +136,6 @@ def tune_regressor(
     if model_name not in model_classes:
         raise ValueError("Use 'knn', 'edited', or 'condensed'.")
 
-    # Split only the supplied outer training data
     train_idx, valid_idx = split_inner_indices(
         len(X), random_state=random_state
     )
@@ -152,6 +153,17 @@ def tune_regressor(
     y_inner = y[train_idx]
     y_valid = y[valid_idx]
 
+    cyclic_periods = None
+    X_cyc_inner = None
+    X_cyc_valid = None
+    if cyclic_cols:
+        X_cyc_inner, cyclic_periods = du.encode_cyclic_columns(
+            X.iloc[train_idx], cyclic_cols
+        )
+        X_cyc_valid, _ = du.encode_cyclic_columns(
+            X.iloc[valid_idx], cyclic_cols
+        )
+
     k_values = list(k_candidates)
     gamma_values = list(gamma_candidates)
 
@@ -168,19 +180,18 @@ def tune_regressor(
 
     for epsilon in epsilon_values:
 
-        # Reduction depends on epsilon, not final prediction k/gamma.
-        # Fit once per epsilon, then reuse the retained reference set.
         if model_name == "knn":
-            model = KNNRegressor(k=1, gamma=1.0)
+            model = KNNRegressor(k=1, gamma=1.0, cyclic_periods=cyclic_periods)
         else:
-            settings = dict(k=1, gamma=1.0, epsilon=epsilon)
+            settings = dict(k=1, gamma=1.0, epsilon=epsilon,
+                             cyclic_periods=cyclic_periods)
 
             if model_name == "condensed":
                 settings["random_state"] = random_state
 
             model = model_classes[model_name](**settings)
 
-        model.fit(X_inner, y_inner)
+        model.fit(X_inner, y_inner, X_cyclic_train=X_cyc_inner)
         retained_n = len(model.y_train_)
 
         for k in k_values:
@@ -200,7 +211,7 @@ def tune_regressor(
                 if model_name != "knn":
                     model.effective_k_ = int(k)
 
-                predictions = model.predict(X_valid)
+                predictions = model.predict(X_valid, X_cyclic_test=X_cyc_valid)
                 score = float(mean_squared_error(y_valid, predictions))
 
                 if not np.isfinite(score):
@@ -220,7 +231,6 @@ def tune_regressor(
                     "retained_n": retained_n
                 })
 
-                # Exact ties favor smaller k, gamma, then epsilon
                 key = (
                     score, int(k), float(gamma),
                     0.0 if epsilon is None else float(epsilon)
@@ -243,8 +253,10 @@ def run_regression_5x2(
     k_candidates,
     gamma_candidates,
     epsilon_candidates,
-    random_state=42
+    random_state=42,
+    cyclic_cols=None
 ):
+    # cyclic_cols: e.g. ["month", "day"]. None => unchanged (Abalone).
     y = np.asarray(y, dtype=float)
 
     if y.ndim != 1 or len(X) != len(y):
@@ -276,7 +288,6 @@ def run_regression_5x2(
         inner_seed = random_state + rep * 2 + fold
         selected = {}
 
-        # Tune using only the outer training half
         for name in model_classes:
             print(
                 f"Repetition {rep + 1}, fold {fold}: tuning {name}",
@@ -292,7 +303,8 @@ def run_regression_5x2(
                 k_candidates=k_candidates,
                 gamma_candidates=gamma_candidates,
                 epsilon_candidates=epsilon_candidates,
-                random_state=inner_seed
+                random_state=inner_seed,
+                cyclic_cols=cyclic_cols
             )
 
             selected[name] = (params, validation_mse)
@@ -305,7 +317,6 @@ def run_regression_5x2(
                     **trial
                 })
 
-        # Refit preprocessing on the full outer training half
         preprocessor = RegressionPreprocessor(
             numerical_cols=numerical_cols,
             categorical_levels=categorical_levels
@@ -315,7 +326,17 @@ def run_regression_5x2(
         X_train_ready = preprocessor.transform(X_train)
         X_test_ready = preprocessor.transform(X_test)
 
-        # Evaluate all models on the same test half
+        cyclic_periods = None
+        X_cyc_train_ready = None
+        X_cyc_test_ready = None
+        if cyclic_cols:
+            X_cyc_train_ready, cyclic_periods = du.encode_cyclic_columns(
+                X_train, cyclic_cols
+            )
+            X_cyc_test_ready, _ = du.encode_cyclic_columns(
+                X_test, cyclic_cols
+            )
+
         for name in ["null", "knn", "edited", "condensed"]:
 
             if name == "null":
@@ -325,14 +346,19 @@ def run_regression_5x2(
             else:
                 params, validation_mse = selected[name]
                 settings = params.copy()
+                settings["cyclic_periods"] = cyclic_periods
 
                 if name == "condensed":
                     settings["random_state"] = inner_seed
 
                 model = model_classes[name](**settings)
 
-            model.fit(X_train_ready, y_train)
-            predictions = model.predict(X_test_ready)
+            if name == "null":
+                model.fit(X_train_ready, y_train)
+                predictions = model.predict(X_test_ready)
+            else:
+                model.fit(X_train_ready, y_train, X_cyclic_train=X_cyc_train_ready)
+                predictions = model.predict(X_test_ready, X_cyclic_test=X_cyc_test_ready)
 
             if predictions.shape != y_test.shape:
                 raise ValueError("Prediction and target shapes differ.")

@@ -70,3 +70,35 @@ class RegressionPreprocessor:
 
         return values
 
+
+MONTH_ORDER = ["jan", "feb", "mar", "apr", "may", "jun",
+               "jul", "aug", "sep", "oct", "nov", "dec"]
+DAY_ORDER = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+
+CYCLIC_PERIODS = {"month": len(MONTH_ORDER), "day": len(DAY_ORDER)}
+
+
+def encode_cyclic_columns(df, columns):
+
+    orders = {"month": MONTH_ORDER, "day": DAY_ORDER}
+    encoded_cols = []
+    periods = []
+
+    for col in columns:
+        if col not in orders:
+            raise ValueError(f"No cyclic ordering defined for column '{col}'.")
+
+        order = orders[col]
+        lookup = {name: i for i, name in enumerate(order)}
+
+        values = df[col].astype(str).str.strip().str.lower().map(lookup)
+
+        if values.isna().any():
+            bad = df[col][values.isna()].unique()
+            raise ValueError(f"Unrecognized value(s) in column '{col}': {bad}")
+
+        encoded_cols.append(values.to_numpy(dtype=float))
+        periods.append(len(order))
+
+    encoded = np.column_stack(encoded_cols) if encoded_cols else np.empty((len(df), 0))
+    return encoded, periods

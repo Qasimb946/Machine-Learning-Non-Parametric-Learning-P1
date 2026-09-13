@@ -9,6 +9,59 @@ import evaluation as evl
 import pandas as pd
 from pathlib import Path
 
+def run_forestfires_experiment():
+    project_dir = Path(__file__).resolve().parent.parent
+
+    columns = [
+        "X", "Y", "month", "day", "FFMC", "DMC", "DC", "ISI",
+        "temp", "RH", "wind", "rain", "area"
+    ]
+
+    df = pd.read_csv(
+        project_dir / "data" / "forestfires.csv",
+        header=0,
+        names=columns
+    )
+    df = df.reset_index(drop=True)
+
+    X = df.drop(columns=["area"])
+
+    # PDF-mandated log transform on the target only -- never z-score
+    # area, never inverse-transform before computing loss.
+    y = np.log(df["area"].to_numpy(dtype=float) + 1.0)
+
+    numerical_cols = [
+        "X", "Y", "FFMC", "DMC", "DC", "ISI",
+        "temp", "RH", "wind", "rain"
+    ]
+
+    results, summary, tuning, predictions = evl.run_regression_5x2(
+        X,
+        y,
+        numerical_cols=numerical_cols,
+        categorical_levels=None,
+        k_candidates=range(1, 26),
+        gamma_candidates=np.logspace(-3, 2, 25),
+        epsilon_candidates=np.linspace(0, 2, 11),
+        random_state=42,
+        cyclic_cols=["month", "day"]
+    )
+
+    output_dir = project_dir / "results" / "forestfires"
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    for name, table in {
+        "fold_scores": results,
+        "summary": summary,
+        "tuning": tuning,
+        "predictions": predictions
+    }.items():
+        table.to_csv(output_dir / f"{name}.csv", index=False)
+
+    print("\nFINAL SUMMARY (log-area scale)")
+    print(summary.round(4).to_string(index=False))
+
+    return results, summary, tuning, predictions
 
 def run_abalone_experiment():
     project_dir = Path(__file__).resolve().parent.parent
@@ -122,7 +175,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--task",
         required=True,
-        choices=["null-classifier", "knn-classifier", "abalone"]
+        choices=["null-classifier", "knn-classifier", "abalone", "forestfires"]
     )
 
     args = parser.parse_args()
@@ -135,3 +188,6 @@ if __name__ == "__main__":
 
     elif args.task == "abalone":
         run_abalone_experiment()
+
+    elif args.task == "forestfires":
+        run_forestfires_experiment()
