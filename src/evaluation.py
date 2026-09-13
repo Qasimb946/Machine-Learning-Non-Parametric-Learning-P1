@@ -32,6 +32,12 @@ def classification_error(y_true, y_pred):
 def mean_squared_error(y_true, y_pred):
     return np.mean((y_true - y_pred) ** 2)
 
+def root_mean_squared_error(y_true, y_pred):
+    return np.sqrt(mean_squared_error(y_true, y_pred))
+
+def mean_absolute_error(y_true, y_pred):
+    return np.mean(np.abs(y_true - y_pred))
+
 
 def cross_validation(model, X, y, error_function, seed=None):
     if seed is not None:
@@ -332,9 +338,11 @@ def run_regression_5x2(
                 raise ValueError("Prediction and target shapes differ.")
 
             test_mse = float(mean_squared_error(y_test, predictions))
+            test_rmse = float(root_mean_squared_error(y_test, predictions))
+            test_mae = float(mean_absolute_error(y_test, predictions))
 
-            if not np.isfinite(test_mse):
-                raise ValueError("Test MSE is not finite.")
+            if not all(np.isfinite([test_mse, test_rmse, test_mae])):
+                raise ValueError("One or more test metrics are not finite.")
 
             if name == "null":
                 retained_n = None
@@ -355,6 +363,8 @@ def run_regression_5x2(
                 "epsilon": params.get("epsilon"),
                 "validation_mse": validation_mse,
                 "test_mse": test_mse,
+                "test_rmse": test_rmse,
+                "test_mae": test_mae,
                 "train_n": len(y_train),
                 "test_n": len(y_test),
                 "retained_n": retained_n,
@@ -391,7 +401,11 @@ def run_regression_5x2(
     summary_df = results_df.groupby("model").agg(
         mean_test_mse=("test_mse", "mean"),
         std_fold_mse=("test_mse", "std"),
+        mean_test_rmse=("test_rmse", "mean"),
+        std_fold_rmse=("test_rmse", "std"),
+        mean_test_mae=("test_mae", "mean"),
+        std_fold_mae=("test_mae", "std"),
         mean_retained_percent=("retained_percent", "mean")
-    ).reset_index()
+        ).reset_index()
 
     return results_df, summary_df, tuning_df, predictions_df
