@@ -113,9 +113,7 @@ def test_cnn_classifier():
     return best_result
 
 
-if __name__ == '__main__':
-    # null_classifier_errors = test_null_classifier()
-    # print(null_classifier_errors)
+
 if __name__ == "__main__":
     import argparse
 
