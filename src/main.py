@@ -6,6 +6,63 @@ import data_utils as du
 import classification as cls
 import evaluation as evl
 
+import pandas as pd
+from pathlib import Path
+
+
+def run_abalone_experiment():
+    project_dir = Path(__file__).resolve().parent.parent
+
+    columns = [
+        "Sex", "Length", "Diameter", "Height",
+        "Whole weight", "Shucked Weight",
+        "Viscera weight", "Shell weight", "Rings"
+    ]
+
+    df = pd.read_csv(
+        project_dir / "data" / "abalone.data",
+        header=None,
+        names=columns
+    )
+
+    # The Height correction and outlier exclusion are assumptions.
+    df = df.loc[
+        df["Height"].ne(0) & df["Height"].ne(0.515)
+    ].copy()
+
+    df.loc[df["Height"].eq(1.13), "Height"] = 0.113
+    df = df.reset_index(drop=True)
+
+    X = df.drop(columns=["Rings"])
+    y = df["Rings"].to_numpy(dtype=float)
+
+    results, summary, tuning, predictions = evl.run_regression_5x2(
+        X,
+        y,
+        numerical_cols=columns[1:-1],
+        categorical_levels={"Sex": ["F", "I", "M"]},
+        k_candidates=range(1, 26),
+        gamma_candidates=np.logspace(-3, 2, 25),
+        epsilon_candidates=[0, 1, 2, 3, 4, 5, 6, 8, 10],
+        random_state=42
+    )
+
+    output_dir = project_dir / "results" / "abalone"
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    for name, table in {
+        "fold_scores": results,
+        "summary": summary,
+        "tuning": tuning,
+        "predictions": predictions
+    }.items():
+        table.to_csv(output_dir / f"{name}.csv", index=False)
+
+    print("\nFINAL SUMMARY")
+    print(summary.round(4).to_string(index=False))
+
+    return results, summary, tuning, predictions
+
 
 def test_null_classifier():
     breast_cancer = du.load_data("data/breast-cancer-wisconsin.data", missing_value="?")
@@ -59,9 +116,24 @@ def test_cnn_classifier():
 if __name__ == '__main__':
     # null_classifier_errors = test_null_classifier()
     # print(null_classifier_errors)
+if __name__ == "__main__":
+    import argparse
 
-    # knn_classifier_result = test_knn_classifier()
-    # print(knn_classifier_result)
+    parser = argparse.ArgumentParser()
 
-    cnn_classifier_result = test_cnn_classifier()
-    print(cnn_classifier_result)
+    parser.add_argument(
+        "--task",
+        required=True,
+        choices=["null-classifier", "knn-classifier", "abalone"]
+    )
+
+    args = parser.parse_args()
+
+    if args.task == "null-classifier":
+        print(test_null_classifier())
+
+    elif args.task == "knn-classifier":
+        print(test_knn_classifier())
+
+    elif args.task == "abalone":
+        run_abalone_experiment()
