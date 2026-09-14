@@ -1,0 +1,11 @@
+Dataset                Model    k     p     Mean Error  
+----------------------------------------------------------
+Breast Cancer          Null     -     -     0.3499
+Breast Cancer          KNN      1     1     0.0354
+Breast Cancer          CNN      5     2     0.0958
+Car                    Null     -     -     0.2998
+Car                    KNN      5     1     0.1245
+Car                    CNN      5     1     0.1672
+Congressional Vote     Null     -     -     0.3862
+Congressional Vote     KNN      1     1     0.0805
+Congressional Vote     CNN      1     1     0.1122
