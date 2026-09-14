@@ -167,7 +167,7 @@ def run_classification_summary():
 def print_classification_summary(rows):
     lines = []
 
-    lines.append(f"{'Dataset':<22} {'Model':<8} {'k':<5} {'p':<5} {'Mean Error':<12}")
+    lines.append(f"{'Dataset':<22} {'Model':<8} {'k':<5} {'p':<5} {'Classification Error':<12}")
     lines.append("-" * 58)
 
     for dataset, model, k, p, error in rows:
