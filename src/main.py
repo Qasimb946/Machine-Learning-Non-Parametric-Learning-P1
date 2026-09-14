@@ -117,54 +117,79 @@ def run_abalone_experiment():
     return results, summary, tuning, predictions
 
 
-def test_null_classifier():
-    breast_cancer = du.load_data("data/breast-cancer-wisconsin.data", missing_value="?")
-
-    X = breast_cancer[:, 1:-1].astype(float)
-    y = breast_cancer[:, -1]
-
+def test_null_classifier(dataset_name):
+    X, y, normalize = du.load_classification_dataset(dataset_name)
     model = cls.NullClassifier()
-    errors = evl.cross_validation(model, X, y, evl.classification_error)
+    errors = evl.cross_validation(model, X, y, evl.classification_error, seed=42, normalize=normalize)
     return errors
 
 
-def test_knn_classifier():
-    results = []
+def test_knn_classifier(dataset_name):
+    X, y, normalize = du.load_classification_dataset(dataset_name)
+    errors, params = evl.tuned_cross_validation(cls.KNNClassifier, X, y, evl.classification_error, seed=42, normalize=normalize)
+    return errors, params
 
-    breast_cancer = du.load_data("data/breast-cancer-wisconsin.data", missing_value="?")
-    X = breast_cancer[:, 1:-1].astype(float)
-    y = breast_cancer[:, -1]
+def test_cnn_classifier(dataset_name):
+    X, y, normalize = du.load_classification_dataset(dataset_name)
+    errors, params = evl.tuned_cross_validation(cls.CondensedKNNClassifier, X, y, evl.classification_error, seed=42, normalize=normalize)
+    return errors, params
 
-    for p in [1, 2]:
-        for k in range(1, 10):
-            model = cls.KNNClassifier(k=k, p=p)
-            errors = evl.cross_validation(model, X, y, evl.classification_error, seed=42)
-            results.append([k, p, np.mean(errors)])
+def most_common_params(params):
+    pairs = params[:, :2].astype(int)
 
-    results = np.array(results)
-    best_index = np.argmin(results[:, 2])
-    best_result = results[best_index]
-    return best_result
+    unique_pairs, counts = np.unique(pairs, axis=0, return_counts=True)
+    best_index = np.argmax(counts)
+
+    return unique_pairs[best_index]
+
+def run_classification_summary():
+    rows = []
+
+    for dataset_name, display_name in [
+        ("breast", "Breast Cancer"),
+        ("car", "Car"),
+        ("vote", "Congressional Vote")
+    ]:
+        null_errors = test_null_classifier(dataset_name)
+        rows.append([display_name, "Null", "-", "-", np.mean(null_errors)])
+
+        knn_errors, knn_params = test_knn_classifier(dataset_name)
+        knn_k, knn_p = most_common_params(knn_params)
+        rows.append([display_name, "KNN", knn_k, knn_p, np.mean(knn_errors)])
+
+        cnn_errors, cnn_params = test_cnn_classifier(dataset_name)
+        cnn_k, cnn_p = most_common_params(cnn_params)
+        rows.append([display_name, "CNN", cnn_k, cnn_p, np.mean(cnn_errors)])
+
+    return rows
 
 
-def test_cnn_classifier():
-    results = []
+def print_classification_summary(rows):
+    lines = []
 
-    breast_cancer = du.load_data("data/breast-cancer-wisconsin.data", missing_value="?")
-    X = breast_cancer[:, 1:-1].astype(float)
-    y = breast_cancer[:, -1]
+    lines.append(f"{'Dataset':<22} {'Model':<8} {'k':<5} {'p':<5} {'Mean Error':<12}")
+    lines.append("-" * 58)
 
-    for p in [1, 2]:
-        for k in range(1, 10):
-            model = cls.CondensedKNNClassifier(k=k, p=p)
-            errors = evl.cross_validation(model, X, y, evl.classification_error, seed=42)
-            results.append([k, p, np.mean(errors)])
-    results = np.array(results)
-    best_index = np.argmin(results[:, 2])
-    best_result = results[best_index]
+    for dataset, model, k, p, error in rows:
+        lines.append(f"{dataset:<22} {model:<8} {str(k):<5} {str(p):<5} {error:.4f}")
 
-    return best_result
+    output = "\n".join(lines)
 
+    print(output)
+
+    return output
+
+def run_classification_experiment():
+    results = run_classification_summary()
+    output = print_classification_summary(results)
+
+    output_dir = Path(__file__).resolve().parent.parent / "results"
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    with open(output_dir / "classification_summary.txt", "w") as file:
+        file.write(output)
+
+    return results
 
 
 if __name__ == "__main__":
@@ -175,19 +200,18 @@ if __name__ == "__main__":
     parser.add_argument(
         "--task",
         required=True,
-        choices=["null-classifier", "knn-classifier", "abalone", "forestfires"]
+        choices=["test-classification", "abalone", "forestfires"]
     )
 
     args = parser.parse_args()
 
-    if args.task == "null-classifier":
-        print(test_null_classifier())
-
-    elif args.task == "knn-classifier":
-        print(test_knn_classifier())
+    if args.task == "test-classification":
+        run_classification_experiment()
 
     elif args.task == "abalone":
         run_abalone_experiment()
 
     elif args.task == "forestfires":
         run_forestfires_experiment()
+
+

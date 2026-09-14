@@ -32,36 +32,123 @@ def classification_error(y_true, y_pred):
 def mean_squared_error(y_true, y_pred):
     return np.mean((y_true - y_pred) ** 2)
 
+
 def root_mean_squared_error(y_true, y_pred):
     return np.sqrt(mean_squared_error(y_true, y_pred))
+
 
 def mean_absolute_error(y_true, y_pred):
     return np.mean(np.abs(y_true - y_pred))
 
 
-def cross_validation(model, X, y, error_function, seed=None):
+def tune_classifier(X_train, y_train, model_class, normalize=True, seed=42):
+    train_idx, valid_idx = split_inner_indices(len(X_train), random_state=seed)
+
+    X_inner = X_train[train_idx]
+    y_inner = y_train[train_idx]
+
+    X_valid = X_train[valid_idx]
+    y_valid = y_train[valid_idx]
+
+    if normalize:
+        X_min, X_max, X_inner_ready = du.min_max_normalization(X_inner)
+        X_valid_ready = du.helper_min_max_normalization(X_valid, X_min, X_max)
+    else:
+        X_inner_ready = X_inner
+        X_valid_ready = X_valid
+
+    results = []
+
+    for p in [1, 2]:
+        for k in range(1, 20):
+            np.random.seed(seed)
+            model = model_class(k=k, p=p)
+            model.fit(X_inner_ready, y_inner)
+            y_pred = model.predict(X_valid_ready)
+            error = classification_error(y_valid, y_pred)
+            results.append([k, p, error])
+
+    results = np.array(results)
+
+    best_index = np.argmin(results[:, 2])
+    best_result = results[best_index]
+
+    return int(best_result[0]), int(best_result[1]), best_result[2]
+
+def tuned_cross_validation(model_class, X, y, error_function, seed=42, normalize=True):
+    errors = []
+    selected_params = []
+
+    np.random.seed(seed)
+
+    for i in range(5):
+        X_A, X_B, y_A, y_B = train_test_split(X, y)
+
+        # A trains, B tests
+        best_k, best_p, validation_error = tune_classifier(X_A, y_A, model_class, normalize=normalize, seed=seed + i)
+        selected_params.append([best_k, best_p, validation_error])
+
+        if normalize:
+            X_min, X_max, X_A_ready = du.min_max_normalization(X_A)
+            X_B_ready = du.helper_min_max_normalization(X_B, X_min, X_max)
+        else:
+            X_A_ready = X_A
+            X_B_ready = X_B
+
+        model = model_class(k=best_k, p=best_p)
+        model.fit(X_A_ready, y_A)
+        y_pred = model.predict(X_B_ready)
+        errors.append(error_function(y_B, y_pred))
+
+        # B trains, A tests
+        best_k, best_p, validation_error = tune_classifier(X_B, y_B, model_class, normalize=normalize, seed=seed + i + 100)
+        selected_params.append([best_k, best_p, validation_error])
+
+        if normalize:
+            X_min, X_max, X_B_ready = du.min_max_normalization(X_B)
+            X_A_ready = du.helper_min_max_normalization(X_A, X_min, X_max)
+        else:
+            X_B_ready = X_B
+            X_A_ready = X_A
+
+        model = model_class(k=best_k, p=best_p)
+        model.fit(X_B_ready, y_B)
+        y_pred = model.predict(X_A_ready)
+        errors.append(error_function(y_A, y_pred))
+
+    return errors, np.array(selected_params)
+
+def cross_validation(model, X, y, error_function, seed=None, normalize=True):
     if seed is not None:
         np.random.seed(seed)
     errors = []
+
     for _ in range(5):
         X_A, X_B, y_A, y_B = train_test_split(X, y)
 
-        X_min, X_max, X_A_norm = du.min_max_normalization(X_A)
-        X_B_norm = du.helper_min_max_normalization(X_B, X_min, X_max)
+        if normalize:
+            X_min, X_max, X_A_ready = du.min_max_normalization(X_A)
+            X_B_ready = du.helper_min_max_normalization(X_B, X_min, X_max)
+        else:
+            X_A_ready = X_A
+            X_B_ready = X_B
 
-        model.fit(X_A_norm, y_A)
-        y_pred = model.predict(X_B_norm)
+        model.fit(X_A_ready, y_A)
+        y_pred = model.predict(X_B_ready)
         errors.append(error_function(y_B, y_pred))
 
-        X_min, X_max, X_B_norm = du.min_max_normalization(X_B)
-        X_A_norm = du.helper_min_max_normalization(X_A, X_min, X_max)
+        if normalize:
+            X_min, X_max, X_B_ready = du.min_max_normalization(X_B)
+            X_A_ready = du.helper_min_max_normalization(X_A, X_min, X_max)
+        else:
+            X_B_ready = X_B
+            X_A_ready = X_A
 
-        model.fit(X_B_norm, y_B)
-        y_pred = model.predict(X_A_norm)
+        model.fit(X_B_ready, y_B)
+        y_pred = model.predict(X_A_ready)
         errors.append(error_function(y_A, y_pred))
 
     return errors
-
 
 
 def generate_5x2_indices(n_samples, random_state=42):
@@ -101,6 +188,7 @@ def split_inner_indices(n_samples, validation_fraction=0.2,
 
     return positions[:split_position], positions[split_position:]
 
+
 from data_utils import RegressionPreprocessor
 from regression import (
     KNNRegressor,
@@ -109,6 +197,7 @@ from regression import (
 )
 import pandas as pd
 from regression import NullRegressor
+
 
 def tune_regressor(
     X, y, model_name,

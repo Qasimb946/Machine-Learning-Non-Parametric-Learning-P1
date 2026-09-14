@@ -15,14 +15,62 @@ def load_data(file_path, has_header=False, missing_value=None):
     return data
 
 
+def load_classification_dataset(dataset_name):
+    if dataset_name == "breast":
+        data = load_data(
+            "data/breast-cancer-wisconsin.data",
+            missing_value="?"
+        )
+
+        X = data[:, 1:-1].astype(float)
+        y = data[:, -1]
+        normalize = True
+
+    elif dataset_name == "car":
+        data = load_data("data/car.data")
+
+        X = data[:, :-1]
+        y = data[:, -1]
+
+        X = one_hot_encoding(X)
+        normalize = False
+
+    elif dataset_name == "vote":
+        data = load_data("data/house-votes-84.data")
+
+        X = data[:, 1:]
+        y = data[:, 0]
+
+        X = one_hot_encoding(X)
+        normalize = False
+
+    else:
+        raise ValueError("Unknown classification dataset.")
+
+    return X, y, normalize
+
+
 def min_max_normalization(X):
     X_min = np.min(X, axis=0)
     X_max = np.max(X, axis=0)
     return X_min, X_max, (X-X_min)/(X_max - X_min)
 
+
 def helper_min_max_normalization(X, X_min, X_max):
     return (X-X_min)/(X_max - X_min)
 
+
+def one_hot_encoding(X):
+    encoded_columns = []
+    for col in range(X.shape[1]):
+        values = X[:, col]
+        categories = np.unique(values)
+        encoded = np.zeros((len(values), len(categories)))
+        for i, value in enumerate(values):
+            category_index = np.where(categories == value)[0][0]
+            encoded[i, category_index] = 1
+        encoded_columns.append(encoded)
+    return np.hstack(encoded_columns)
 
 import pandas as pd
 
