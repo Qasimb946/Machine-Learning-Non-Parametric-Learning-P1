@@ -1,4 +1,4 @@
-Dataset                Model    k     p     Mean Error  
+Dataset                Model    k     p     Classification Error
 ----------------------------------------------------------
 Breast Cancer          Null     -     -     0.3499
 Breast Cancer          KNN      1     1     0.0354
