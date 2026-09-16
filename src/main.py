@@ -9,6 +9,7 @@ import evaluation as evl
 import pandas as pd
 from pathlib import Path
 
+
 def run_hardware_experiment(log_transform=True):
     project_dir = Path(__file__).resolve().parent.parent
 
@@ -162,6 +163,7 @@ def compare_hardware_against_erp(log_transform=True, model_names=None):
 
     return comparison
 
+
 def run_forestfires_experiment():
     project_dir = Path(__file__).resolve().parent.parent
 
@@ -214,6 +216,7 @@ def run_forestfires_experiment():
     print(summary.round(4).to_string(index=False))
 
     return results, summary, tuning, predictions
+
 
 def run_abalone_experiment():
     project_dir = Path(__file__).resolve().parent.parent
@@ -278,13 +281,15 @@ def test_null_classifier(dataset_name):
 
 def test_knn_classifier(dataset_name):
     X, y, normalize = du.load_classification_dataset(dataset_name)
-    errors, params = evl.tuned_cross_validation(cls.KNNClassifier, X, y, evl.classification_error, seed=42, normalize=normalize)
+    errors, params, retained_percentages = evl.tuned_cross_validation(cls.KNNClassifier, X, y, evl.classification_error, seed=42, normalize=normalize)
     return errors, params
+
 
 def test_cnn_classifier(dataset_name):
     X, y, normalize = du.load_classification_dataset(dataset_name)
-    errors, params = evl.tuned_cross_validation(cls.CondensedKNNClassifier, X, y, evl.classification_error, seed=42, normalize=normalize)
-    return errors, params
+    errors, params, retained_percentages = evl.tuned_cross_validation(cls.CondensedKNNClassifier, X, y, evl.classification_error, seed=42, normalize=normalize)
+    return errors, params, retained_percentages
+
 
 def most_common_params(params):
     pairs = params[:, :2].astype(int)
@@ -294,8 +299,10 @@ def most_common_params(params):
 
     return unique_pairs[best_index]
 
+
 def run_classification_summary():
-    rows = []
+    summary_rows = []
+    dataset_results = {}
 
     for dataset_name, display_name in [
         ("breast", "Breast Cancer"),
@@ -303,45 +310,57 @@ def run_classification_summary():
         ("vote", "Congressional Vote")
     ]:
         null_errors = test_null_classifier(dataset_name)
-        rows.append([display_name, "Null", "-", "-", np.mean(null_errors)])
 
         knn_errors, knn_params = test_knn_classifier(dataset_name)
         knn_k, knn_p = most_common_params(knn_params)
-        rows.append([display_name, "KNN", knn_k, knn_p, np.mean(knn_errors)])
 
-        cnn_errors, cnn_params = test_cnn_classifier(dataset_name)
+        cnn_errors, cnn_params, cnn_percentages = test_cnn_classifier(dataset_name)
         cnn_k, cnn_p = most_common_params(cnn_params)
-        rows.append([display_name, "CNN", cnn_k, cnn_p, np.mean(cnn_errors)])
 
-    return rows
+        summary_rows.append([display_name, "Null", "-", "-", np.mean(null_errors)])
+        summary_rows.append([display_name, "KNN", knn_k, knn_p, np.mean(knn_errors)])
+        summary_rows.append([display_name, "CNN", cnn_k, cnn_p, np.mean(cnn_errors)])
 
+        fold_rows = []
 
-def print_classification_summary(rows):
-    lines = []
+        for i in range(10):
+            fold_rows.append([
+                i + 1,
+                "-", "-",
+                null_errors[i],
+                int(knn_params[i, 0]), int(knn_params[i, 1]), knn_errors[i],
+                int(cnn_params[i, 0]), int(cnn_params[i, 1]), cnn_percentages[i], cnn_errors[i]
+            ])
 
-    lines.append(f"{'Dataset':<22} {'Model':<8} {'k':<5} {'p':<5} {'Classification Error':<12}")
-    lines.append("-" * 58)
+        dataset_results[dataset_name] = fold_rows
 
-    for dataset, model, k, p, error in rows:
-        lines.append(f"{dataset:<22} {model:<8} {str(k):<5} {str(p):<5} {error:.4f}")
+    return summary_rows, dataset_results
 
-    output = "\n".join(lines)
-
-    print(output)
-
-    return output
 
 def run_classification_experiment():
-    results = run_classification_summary()
-    output = print_classification_summary(results)
+    summary_rows, dataset_results = run_classification_summary()
 
     output_dir = Path(__file__).resolve().parent.parent / "results"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    with open(output_dir / "classification_summary.txt", "w") as file:
-        file.write(output)
+    columns = [
+        "Iteration",
+        "Null k", "Null p", "Null Error",
+        "KNN k", "KNN p", "KNN Error",
+        "CNN k", "CNN p", "CNN Sample Percentage", "CNN Error"
+    ]
 
-    return results
+    for dataset_name, rows in dataset_results.items():
+        df = pd.DataFrame(rows, columns=columns)
+        df.to_csv(output_dir / f"{dataset_name}.csv", index=False)
+
+    summary_columns = ["Dataset", "Model", "k", "p", "Classification Error"]
+    summary_df = pd.DataFrame(summary_rows, columns=summary_columns)
+    summary_df.to_csv(output_dir / "classification_summary.csv", index=False)
+
+    # print(summary_df.to_string(index=False))
+
+    return summary_df
 
 
 if __name__ == "__main__":

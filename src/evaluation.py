@@ -75,9 +75,11 @@ def tune_classifier(X_train, y_train, model_class, normalize=True, seed=42):
 
     return int(best_result[0]), int(best_result[1]), best_result[2]
 
+
 def tuned_cross_validation(model_class, X, y, error_function, seed=42, normalize=True):
     errors = []
     selected_params = []
+    retained_percentages = []
 
     np.random.seed(seed)
 
@@ -97,6 +99,11 @@ def tuned_cross_validation(model_class, X, y, error_function, seed=42, normalize
 
         model = model_class(k=best_k, p=best_p)
         model.fit(X_A_ready, y_A)
+        if hasattr(model, "X_train_sub"):
+            retained_percentages.append(100 * len(model.X_train_sub) / len(X_A))
+        else:
+            retained_percentages.append(None)
+
         y_pred = model.predict(X_B_ready)
         errors.append(error_function(y_B, y_pred))
 
@@ -113,10 +120,17 @@ def tuned_cross_validation(model_class, X, y, error_function, seed=42, normalize
 
         model = model_class(k=best_k, p=best_p)
         model.fit(X_B_ready, y_B)
+
+        if hasattr(model, "X_train_sub"):
+            retained_percentages.append(100 * len(model.X_train_sub) / len(X_B))
+        else:
+            retained_percentages.append(None)
+
         y_pred = model.predict(X_A_ready)
         errors.append(error_function(y_A, y_pred))
 
-    return errors, np.array(selected_params)
+    return errors, np.array(selected_params), retained_percentages
+
 
 def cross_validation(model, X, y, error_function, seed=None, normalize=True):
     if seed is not None:
