@@ -29,6 +29,29 @@ def classification_error(y_true, y_pred):
     return incorrect/total
 
 
+def macro_average(y_true, y_pred):
+    classes = np.unique(y_true)
+
+    precisions = []
+    recalls = []
+
+    for c in classes:
+        TP = np.sum((y_true == c) & (y_pred == c))
+        FP = np.sum((y_true != c) & (y_pred == c))
+        FN = np.sum((y_true == c) & (y_pred != c))
+
+        precision = TP / (TP + FP) if TP + FP > 0 else 0
+        recall = TP / (TP + FN) if TP + FN > 0 else 0
+
+        precisions.append(precision)
+        recalls.append(recall)
+
+    macro_precision = np.mean(precisions)
+    macro_recall = np.mean(recalls)
+
+    return macro_precision, macro_recall
+
+
 def mean_squared_error(y_true, y_pred):
     return np.mean((y_true - y_pred) ** 2)
 
@@ -80,6 +103,7 @@ def tuned_cross_validation(model_class, X, y, error_function, seed=42, normalize
     errors = []
     selected_params = []
     retained_percentages = []
+    macro_scores = []
 
     np.random.seed(seed)
 
@@ -107,6 +131,9 @@ def tuned_cross_validation(model_class, X, y, error_function, seed=42, normalize
         y_pred = model.predict(X_B_ready)
         errors.append(error_function(y_B, y_pred))
 
+        macro_precision, macro_recall = macro_average(y_B, y_pred)
+        macro_scores.append([macro_precision, macro_recall])
+
         # B trains, A tests
         best_k, best_p, validation_error = tune_classifier(X_B, y_B, model_class, normalize=normalize, seed=seed + i + 100)
         selected_params.append([best_k, best_p, validation_error])
@@ -129,7 +156,10 @@ def tuned_cross_validation(model_class, X, y, error_function, seed=42, normalize
         y_pred = model.predict(X_A_ready)
         errors.append(error_function(y_A, y_pred))
 
-    return errors, np.array(selected_params), retained_percentages
+        macro_precision, macro_recall = macro_average(y_A, y_pred)
+        macro_scores.append([macro_precision, macro_recall])
+
+    return errors, np.array(selected_params), retained_percentages, np.array(macro_scores)
 
 
 def cross_validation(model, X, y, error_function, seed=None, normalize=True):

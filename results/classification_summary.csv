@@ -1,10 +1,10 @@
 Dataset,Model,k,p,Classification Error
-Breast Cancer,Null,-,-,0.34993997701977336
-Breast Cancer,KNN,1,1,0.035430707756683985
-Breast Cancer,CNN,5,2,0.09575208794224074
-Car,Null,-,-,0.2997685185185185
-Car,KNN,5,1,0.12453703703703703
-Car,CNN,5,1,0.16724537037037038
-Congressional Vote,Null,-,-,0.3861983680717034
-Congressional Vote,KNN,1,1,0.08047816344649728
-Congressional Vote,CNN,1,1,0.11219084259924746
+Breast Cancer,Null,-,-,0.350
+Breast Cancer,KNN,1,1,0.035
+Breast Cancer,CNN,5,2,0.096
+Car,Null,-,-,0.300
+Car,KNN,5,1,0.125
+Car,CNN,5,1,0.167
+Congressional Vote,Null,-,-,0.386
+Congressional Vote,KNN,1,1,0.080
+Congressional Vote,CNN,1,1,0.112

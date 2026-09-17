@@ -281,14 +281,14 @@ def test_null_classifier(dataset_name):
 
 def test_knn_classifier(dataset_name):
     X, y, normalize = du.load_classification_dataset(dataset_name)
-    errors, params, retained_percentages = evl.tuned_cross_validation(cls.KNNClassifier, X, y, evl.classification_error, seed=42, normalize=normalize)
-    return errors, params
+    errors, params, retained_percentages, macro_scores = evl.tuned_cross_validation(cls.KNNClassifier, X, y, evl.classification_error, seed=42, normalize=normalize)
+    return errors, params, macro_scores
 
 
 def test_cnn_classifier(dataset_name):
     X, y, normalize = du.load_classification_dataset(dataset_name)
-    errors, params, retained_percentages = evl.tuned_cross_validation(cls.CondensedKNNClassifier, X, y, evl.classification_error, seed=42, normalize=normalize)
-    return errors, params, retained_percentages
+    errors, params, retained_percentages, macro_scores = evl.tuned_cross_validation(cls.CondensedKNNClassifier, X, y, evl.classification_error, seed=42, normalize=normalize)
+    return errors, params, retained_percentages, macro_scores
 
 
 def most_common_params(params):
@@ -311,10 +311,10 @@ def run_classification_summary():
     ]:
         null_errors = test_null_classifier(dataset_name)
 
-        knn_errors, knn_params = test_knn_classifier(dataset_name)
+        knn_errors, knn_params, knn_macro = test_knn_classifier(dataset_name)
         knn_k, knn_p = most_common_params(knn_params)
 
-        cnn_errors, cnn_params, cnn_percentages = test_cnn_classifier(dataset_name)
+        cnn_errors, cnn_params, cnn_percentages, cnn_macro = test_cnn_classifier(dataset_name)
         cnn_k, cnn_p = most_common_params(cnn_params)
 
         summary_rows.append([display_name, "Null", "-", "-", np.mean(null_errors)])
@@ -324,14 +324,21 @@ def run_classification_summary():
         fold_rows = []
 
         for i in range(10):
-            fold_rows.append([
+            row = [
                 i + 1,
                 "-", "-",
                 null_errors[i],
                 int(knn_params[i, 0]), int(knn_params[i, 1]), knn_errors[i],
                 int(cnn_params[i, 0]), int(cnn_params[i, 1]), cnn_percentages[i], cnn_errors[i]
-            ])
-
+            ]
+            if dataset_name == "car":
+                row.extend([
+                    knn_macro[i, 0],
+                    knn_macro[i, 1],
+                    cnn_macro[i, 0],
+                    cnn_macro[i, 1]
+                ])
+            fold_rows.append(row)
         dataset_results[dataset_name] = fold_rows
 
     return summary_rows, dataset_results
@@ -351,12 +358,22 @@ def run_classification_experiment():
     ]
 
     for dataset_name, rows in dataset_results.items():
-        df = pd.DataFrame(rows, columns=columns)
-        df.to_csv(output_dir / f"{dataset_name}.csv", index=False)
+        dataset_columns = columns.copy()
+
+        if dataset_name == "car":
+            dataset_columns.extend([
+                "KNN Macro Precision",
+                "KNN Macro Recall",
+                "CNN Macro Precision",
+                "CNN Macro Recall"
+            ])
+
+        df = pd.DataFrame(rows, columns=dataset_columns)
+        df.to_csv(output_dir / f"{dataset_name}.csv", index=False, float_format="%.3f")
 
     summary_columns = ["Dataset", "Model", "k", "p", "Classification Error"]
     summary_df = pd.DataFrame(summary_rows, columns=summary_columns)
-    summary_df.to_csv(output_dir / "classification_summary.csv", index=False)
+    summary_df.to_csv(output_dir / "classification_summary.csv", index=False, float_format="%.3f")
 
     # print(summary_df.to_string(index=False))
 
